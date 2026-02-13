@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>琥珀音箱 ADB 驗證碼計算器 / Amber Speaker ADB Auth Calculator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 450px;
+        }
+        h2 {
+            text-align: center;
+            color: #2c3e50;
+            margin-top: 0;
+            font-size: 1.5rem;
+        }
+        .lang-switch {
+            text-align: right;
+            margin-bottom: 20px;
+        }
+        .lang-switch select {
+            padding: 5px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 8px;
+        }
+        input[type="text"] {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .result-box {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f6f3;
+            border-left: 5px solid #1abc9c;
+            border-radius: 4px;
+            display: none;
+        }
+        .result-box.error {
+            background-color: #fdedec;
+            border-left-color: #e74c3c;
+        }
+        .code-block {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin-top: 10px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="lang-switch">
+        <select id="langSelect" onchange="changeLanguage()">
+            <option value="zh-TW">繁體中文</option>
+            <option value="zh-CN">简体中文</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+        </select>
+    </div>
+
+    <h2 id="t-title">琥珀音箱 ADB 驗證碼計算器</h2>
+
+    <label for="challengeNum" id="t-inputLabel">請輸入音箱顯示的挑戰數字：</label>
+    <input type="text" id="challengeNum" placeholder="例如: 2626409397">
+
+    <button onclick="calculateAuth()" id="t-calcBtn">計算驗證碼</button>
+
+    <div id="resultBox" class="result-box">
+        <strong id="t-success">【計算成功】</strong><br><br>
+        <span id="t-keyLabel">對應的 Key 為:</span> <strong id="outputKey" style="color: #d35400;"></strong><br><br>
+        <span id="t-cmdLabel">請執行以下指令進入連線：</span>
+        <div class="code-block" id="outputCmd"></div>
+    </div>
+</div>
+
+<script>
+    const i18n = {
+        'zh-TW': {
+            title: '琥珀音箱 ADB 驗證碼計算器',
+            inputLabel: '請輸入音箱顯示的挑戰數字：',
+            placeholder: '例如: 2626409397',
+            calcBtn: '計算驗證碼',
+            success: '【計算成功】',
+            keyLabel: '對應的 Key 為:',
+            cmdLabel: '請執行以下指令進入連線：',
+            errorEmpty: '錯誤：請輸入有效的數字。'
+        },
+        'zh-CN': {
+            title: '琥珀音箱 ADB 验证码计算器',
+            inputLabel: '请输入音箱显示的挑战数字：',
+            placeholder: '例如: 2626409397',
+            calcBtn: '计算验证码',
+            success: '【计算成功】',
+            keyLabel: '对应的 Key 为:',
+            cmdLabel: '请执行以下指令进入连线：',
+            errorEmpty: '错误：请输入有效的数字。'
+        },
+        'en': {
+            title: 'Amber Speaker ADB Auth Calculator',
+            inputLabel: 'Enter the challenge number shown:',
+            placeholder: 'e.g., 2626409397',
+            calcBtn: 'Calculate Auth Key',
+            success: '[Calculation Successful]',
+            keyLabel: 'Corresponding Key:',
+            cmdLabel: 'Execute the following command to connect:',
+            errorEmpty: 'Error: Please enter a valid number.'
+        },
+        'ja': {
+            title: '琥珀スピーカー ADB 認証計算機',
+            inputLabel: 'スピーカーに表示された数字を入力：',
+            placeholder: '例: 2626409397',
+            calcBtn: '認証コードを計算',
+            success: '【計算成功】',
+            keyLabel: '対応する Key:',
+            cmdLabel: '接続するには以下のコマンドを実行してください：',
+            errorEmpty: 'エラー：有効な数字を入力してください。'
+        }
+    };
+
+    let currentLang = 'zh-TW';
+
+    function detectLanguage() {
+        const lang = navigator.language || navigator.userLanguage;
+        if (lang.includes('TW') || lang.includes('HK')) return 'zh-TW';
+        if (lang.includes('CN') || lang.includes('SG')) return 'zh-CN';
+        if (lang.startsWith('ja')) return 'ja';
+        if (lang.startsWith('en')) return 'en';
+        return 'zh-TW';
+    }
+
+    window.onload = function() {
+        currentLang = detectLanguage();
+        document.getElementById('langSelect').value = currentLang;
+        applyLanguage(currentLang);
+    };
+
+    function changeLanguage() {
+        currentLang = document.getElementById('langSelect').value;
+        applyLanguage(currentLang);
+        
+        if(document.getElementById('resultBox').style.display === 'block') {
+            calculateAuth();
+        }
+    }
+
+    function applyLanguage(lang) {
+        document.getElementById('t-title').innerText = i18n[lang].title;
+        document.getElementById('t-inputLabel').innerText = i18n[lang].inputLabel;
+        document.getElementById('challengeNum').placeholder = i18n[lang].placeholder;
+        document.getElementById('t-calcBtn').innerText = i18n[lang].calcBtn;
+        document.getElementById('t-success').innerText = i18n[lang].success;
+        document.getElementById('t-keyLabel').innerText = i18n[lang].keyLabel;
+        document.getElementById('t-cmdLabel').innerText = i18n[lang].cmdLabel;
+        document.title = i18n[lang].title;
+    }
+
+    function crc32(str) {
+        let crcTable = window.crcTable;
+        if (!crcTable) {
+            crcTable = window.crcTable = [];
+            for (let n = 0; n < 256; n++) {
+                let c = n;
+                for (let k = 0; k < 8; k++) {
+                    c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1));
+                }
+                crcTable[n] = c;
+            }
+        }
+        let crc = 0 ^ (-1);
+        for (let i = 0; i < str.length; i++) {
+            crc = (crc >>> 8) ^ crcTable[(crc ^ str.charCodeAt(i)) & 0xFF];
+        }
+        return (crc ^ (-1)) >>> 0;
+    }
+
+    function calculateAuth() {
+        const inputStr = document.getElementById('challengeNum').value.trim();
+        const resultBox = document.getElementById('resultBox');
+        
+        if (!inputStr) {
+            alert(i18n[currentLang].errorEmpty);
+            resultBox.style.display = 'none';
+            return;
+        }
+
+        try {
+            const rawStr = `Who are you ? (O_O)??? (${inputStr}) zhihuichuang`;
+            const key = crc32(rawStr);
+            document.getElementById('outputKey').innerText = key;
+            document.getElementById('outputCmd').innerText = `adb shell "auth:${key}"`;
+            
+            resultBox.className = 'result-box';
+            resultBox.style.display = 'block';
+            
+        } catch (e) {
+            alert("Error: " + e);
+        }
+    }
+</script>
+
+</body>
+</html>
